@@ -121,12 +121,24 @@
       }
 
 
+
     </style>
   </head>
   <body>
     <div class="wrapper">
       <div class="input">
         <input type="file" id="photo" name="photo" accept="image/png, image/jpeg"/>
+      </div>
+      <div>
+        <div class="camera">
+          <video id="video">Video stream not available.</video>
+          <br>
+          <button id="startbutton">Take photo</button>
+        </div>
+        <canvas id="canvas">
+        </canvas>
+        <div class="output">
+        </div>
       </div>
       <!--div class="image">
         <img id="image"></img>

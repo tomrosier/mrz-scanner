@@ -23,6 +23,100 @@ var $ = require('jquery');
 
 var worker;
 
+// The width and height of the captured photo. We will set the
+// width to the value defined here, but the height will be
+// calculated based on the aspect ratio of the input stream.
+
+var width = 720;    // We will scale the photo width to this
+var height = 0;     // This will be computed based on the input stream
+
+// |streaming| indicates whether or not we're currently streaming
+// video from the camera. Obviously, we start at false.
+
+var streaming = false;
+
+// The various HTML elements we need to configure or control. These
+// will be set by the startup() function.
+
+var video = null;
+var canvas = null;
+var photo = null;
+var startbutton = null;
+
+var canTakePictures = true;
+
+
+function startup() {
+  video = document.getElementById('video');
+  canvas = document.getElementById('canvas');
+  photo = document.getElementById('photo');
+  startbutton = document.getElementById('startbutton');
+
+  navigator.mediaDevices.getUserMedia({video: true, audio: false})
+  .then(function(stream) {
+    video.srcObject = stream;
+    video.play();
+    console.log(video);
+  })
+  .catch(function(err) {
+    console.log("An error occurred: " + err);
+  });
+
+  video.addEventListener('canplay', function(ev){
+    if (!streaming) {
+      height = video.videoHeight / (video.videoWidth/width);
+    
+      // Firefox currently has a bug where the height can't be read from
+      // the video, so we will make assumptions if this happens.
+    
+      if (isNaN(height)) {
+        height = width / (4/3);
+      }
+    
+      video.setAttribute('width', width);
+      video.setAttribute('height', height);
+      canvas.setAttribute('width', width);
+      canvas.setAttribute('height', height);
+      streaming = true;
+    }
+  }, false);
+
+  startbutton.addEventListener('click', function(ev){
+    takepicture();
+    ev.preventDefault();
+  }, false);
+  
+  clearphoto();
+}
+
+// Fill the photo with an indication that none has been
+// captured.
+
+function clearphoto() {
+  var context = canvas.getContext('2d');
+  context.fillStyle = "#AAA";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+
+  var data = canvas.toDataURL('image/png');
+  // photo.setAttribute('src', data);
+}
+
+function takepicture() {
+  console.log("taking picture");
+  var context = canvas.getContext('2d');
+  if (width && height) {
+    canvas.width = width;
+    canvas.height = height;
+    context.drawImage(video, 0, 0, width, height);
+  
+    var data = canvas.toDataURL('image/png');
+    // photo.setAttribute('src', data);
+    processPicture(data);
+  } else {
+    clearphoto();
+  }
+}
+
 function initWorker() {
 	var blob = new Blob(
     [mrz_worker.toString().replace(/^function .+\{?|\}$/g, '')],
@@ -47,9 +141,6 @@ function initWorker() {
       case 'error':
         $('.progress').removeClass('visible');
         console.log(data);
-        setTimeout(function () {
-          window.alert(data.error);
-        }, 100);
         break;
 
       case 'result':
@@ -77,24 +168,29 @@ function initWorker() {
   return worker;
 }
 
+function processPicture(image) {
+  //      $('#image').attr('src', e.target.result);
+  $('.progress').addClass('visible');
+  $('.progress-text').text('Processing...');
+  worker.postMessage({
+    cmd: 'process',
+    image: image
+  });
+}
+
 $(document).ready(function () {
   try {
     worker = initWorker();
+    startup();
   } catch (err) {
     $('html').text(err.message);
   }
   $('#photo').on('change', function (e) {
     $('#detected, #parsed').empty();
-//    $('#image').attr('src', '');
+
     var reader = new FileReader();
     reader.onload = function (e) {
-//      $('#image').attr('src', e.target.result);
-      $('.progress').addClass('visible');
-      $('.progress-text').text('Processing...');
-      worker.postMessage({
-        cmd: 'process',
-        image: e.target.result
-      });
+      processPicture(e.target.result);
     };
     if (e.target.files.length) {
       reader.readAsDataURL(e.target.files[0]);
@@ -181,7 +277,8 @@ function showImages(images, callback, index) {
     if (data.type == 'image' && data.random == random) {
       worker.removeEventListener('message', showImage);
       var imageData = new ImageData(data.rgba, data.width, data.height);
-      var canvas = document.createElement('canvas');
+      console.log(data);
+      // var canvas = document.createElement('canvas');
       canvas.width = data.width;
       canvas.height = data.height;
       var ctx = canvas.getContext('2d');
